@@ -6,12 +6,13 @@ package AI::MaxEntropy;
 use Algorithm::LBFGS;
 use AI::MaxEntropy::Model;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 sub new() {
     my $class = shift;
     my $self = {
        #smoother => { type => 'gaussian', sigma => 1.0 },
+       smoother => {},
        optimizer => { },
        @_,
        samples => [],
@@ -338,7 +339,8 @@ Please see L<Algorithm::LBFGS/progress_cb> for details.
 
 L<AI::MaxEntropy::Model>, L<Algorithm::LBFGS>
 
-L<Statistics::MaxEntropy>, L<Algorithm::CRF>, L<Algorithm::SVM>
+L<Statistics::MaxEntropy>, L<Algorithm::CRF>, L<Algorithm::SVM>,
+L<AI::DecisionTree>
 
 =head1 AUTHOR
 

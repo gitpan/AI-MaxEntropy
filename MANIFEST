@@ -16,15 +16,7 @@ inc/Test/Differences.pm
 inc/Test/More.pm
 inc/Test/Number/Delta.pm
 inc/Text/Diff.pm
-lib/AI/.MaxEntropy.pm.swl
-lib/AI/.MaxEntropy.pm.swm
-lib/AI/.MaxEntropy.pm.swn
-lib/AI/.MaxEntropy.pm.swo
-lib/AI/.MaxEntropy.pm.swp
 lib/AI/MaxEntropy.pm
-lib/AI/MaxEntropy/.Model.pm.swn
-lib/AI/MaxEntropy/.Model.pm.swo
-lib/AI/MaxEntropy/.Model.pm.swp
 lib/AI/MaxEntropy/Model.pm
 LICENSE
 Makefile.PL

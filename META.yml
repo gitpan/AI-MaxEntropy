@@ -15,4 +15,4 @@ no_index:
     - t
 requires: 
   Algorithm::LBFGS: 0.12
-version: 0.01
+version: 0.02
