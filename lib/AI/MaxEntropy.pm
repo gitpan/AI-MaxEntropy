@@ -5,126 +5,96 @@ package AI::MaxEntropy;
 
 use Algorithm::LBFGS;
 use AI::MaxEntropy::Model;
+use XSLoader;
 
-our $VERSION = '0.02';
+our $VERSION = '0.10';
+XSLoader::load('AI::MaxEntropy', $VERSION);
 
-sub new() {
+sub new {
     my $class = shift;
     my $self = {
-       #smoother => { type => 'gaussian', sigma => 1.0 },
        smoother => {},
        optimizer => { },
        @_,
        samples => [],
        x_bucket => {},
        y_bucket => {},
+       x_list => [],
+       y_list => [],
+       x_num => 0,
+       y_num => 0,
+       f_num => 0
     };
     return bless $self, $class;
 }
 
-sub see() {
-    my $self = shift;
-    my ($x, $y, $w) = @_;
+sub see {
+    my ($self, $x, $y, $w) = @_;
     $w = 1 if not defined($w);
-    # TODO error handeling
-    $self->{x_bucket}->{$_} = undef for @$x;
-    $self->{y_bucket}->{$y} = undef;
-    push @{$self->{samples}}, [$x, $y, $w];
+    my ($x1, $y1) = ([], undef);
+    # preprocess if $x is hashref
+    $x = [
+        map {
+	    my $attr = $_;
+	    ref($x->{$attr}) eq 'ARRAY' ? 
+	        map { "$attr:$_" } @{$x->{$attr}} : "$_:$x->{$_}" 
+        } keys %$x
+    ] if ref($x) eq 'HASH';
+    # convert x from strings to IDs
+    for (@$x) {
+        my $x_id = $self->{x_bucket}->{$_};
+	# new x
+	if (!defined($x_id)) {
+	    push @{$self->{x_list}}, $_;
+	    $self->{x_num} = scalar(@{$self->{x_list}});
+	    $x_id = $self->{x_num} - 1;
+	    $self->{x_bucket}->{$_} = $x_id;
+	    push @$x1, $x_id;
+	}
+        # old x
+	else { push @$x1, $x_id }
+    }
+    # convert y from string to ID
+    my $y_id = $self->{y_bucket}->{$y};
+    # new y
+    if (!defined($y_id)) {
+        push @{$self->{y_list}}, $y;
+	$self->{y_num} = scalar(@{$self->{y_list}});
+	$y_id = $self->{y_num} - 1;
+	$self->{y_bucket}->{$y} = $y_id;
+	$y1 = $y_id;
+    }
+    # old y
+    else { $y1 = $y_id }
+    # add the sample
+    push @{$self->{samples}}, [$x1, $y1, $w];
+    # update f_num
+    $self->{f_num} = $self->{x_num} * $self->{y_num};
 }
 
-sub forget_all() {
+sub forget_all {
     my $self = shift;
     $self->{samples} = [];
     $self->{x_bucket} = {};
     $self->{y_bucket} = {};
-    delete $self->{x_num};
-    delete $self->{y_num};
-    delete $self->{f_num};
-    delete $self->{x_list};
-    delete $self->{y_list};
+    $self->{x_num} = 0;
+    $self->{y_num} = 0;
+    $self->{f_num} = 0;
+    $self->{x_list} = [];
+    $self->{y_list} = [];
 }
 
-sub _preprocess_samples() {
+sub learn {
     my $self = shift;
-    # generate x_list, y_list, x_num, y_num and f_num
-    my @x_list = sort keys %{$self->{x_bucket}};
-    my @y_list = sort keys %{$self->{y_bucket}};
-    $self->{x_list} = \@x_list;
-    $self->{y_list} = \@y_list;
-    $self->{x_num} = scalar(@x_list);
-    $self->{y_num} = scalar(@y_list);
-    $self->{f_num} = $self->{x_num} * $self->{y_num};
-    # give each x and y in x_bucket and y_bucket an ID
-    $self->{x_bucket}->{$x_list[$_]} = $_ for (0 .. $self->{x_num} - 1);
-    $self->{y_bucket}->{$y_list[$_]} = $_ for (0 .. $self->{y_num} - 1);
-    # preprocess samples (replace string forms of x and y by their IDs)
-    # samples -> ripe_samples
-    $self->{ripe_samples} = [];
-    for (@{$self->{samples}}) {
-        my ($x, $y, $w) = @$_;
-	my @x1 = map { $self->{x_bucket}->{$_}} @$x;
-	my $y1 = $self->{y_bucket}->{$y};
-	push @{$self->{ripe_samples}}, [\@x1, $y1, $w];
-    }
-}
-
-sub _neg_log_likelihood() {
-    my ($lambda, $step, $self) = @_;
-    my $log_lh = 0;
-    my @d_log_lh = map { 0 } @$lambda;
-    # calculate log likelihood and its gradient
-    for (@{$self->{ripe_samples}}) {
-        my ($x, $y, $w) = @$_;
-        my @lambda_f = map { 0 } (1 .. $self->{y_num});
-	for my $y1 (0 .. $self->{y_num} - 1) {
-	    for my $x1 (@$x) {
-	        $lambda_f[$y1] += $lambda->[$x1 + $self->{x_num} * $y1];
-	    }
-	}
-	my $sum_exp_lambda_f = 0;
-	$sum_exp_lambda_f += exp($_) for (@lambda_f);
-	$log_lh += $w * ($lambda_f[$y] - log($sum_exp_lambda_f));
-	for my $y1 (0 .. $self->{y_num} - 1) {
-	    my $f = $y1 == $y ? 1 : 0;
-	    for my $x1 (@$x) {
-	        $d_log_lh[$x1 + $self->{x_num} * $y1]
-		    += $w * ($f - exp($lambda_f[$y1]) / $sum_exp_lambda_f);
-	    }
-	}
-    }
-    # smoothing
-    if (defined($self->{smoother}->{type})) {
-        if (lc($self->{smoother}->{type}) eq 'gaussian') {
-            my $sigma = defined($self->{smoother}->{sigma})
-   	        ? $self->{smoother}->{sigma} : 1.0;
-	    for my $y1 (0 .. $self->{y_num} - 1) {
-	        for my $x1 (0 .. $self->{x_num} - 1) {
-		    my $f_id = $x1 + $self->{x_num} * $y1;
-	            $log_lh -= $lambda->[$f_id] ** 2 / ( 2 * $sigma ** 2);
-		    $d_log_lh[$f_id] -= $lambda->[$f_id] / $sigma ** 2;
-		}
-            }
-	}
-    }
-    # nagate values
-    $log_lh = -$log_lh;
-    @d_log_lh = map { -$_ } @d_log_lh;
-    return ($log_lh, \@d_log_lh);
-}
-
-sub learn() {
-    my $self = shift;
-    # pre-process
-    $self->_preprocess_samples;
-    # optimization
     $self->{lambda} = [];
     @{$self->{lambda}} = map { 0 } (1 .. $self->{f_num});
     my $o = Algorithm::LBFGS->new(%{$self->{optimizer}});
     $o->fmin(\&_neg_log_likelihood, $self->{lambda},
         $self->{progress_cb}, $self);
-    # construct the model object
     my $model = AI::MaxEntropy::Model->new;
-    $model->{$_} = $self->{$_}
+    $model->{$_} = ref($self->{$_}) eq 'ARRAY' ? [@{$self->{$_}}] :
+                   ref($self->{$_}) eq 'HASH' ? {%{$self->{$_}}} :
+		   $self->{$_}
         for qw/x_list y_list lambda x_num y_num f_num x_bucket y_bucket/;
     return $model;
 }
@@ -223,7 +193,7 @@ not concerned.
 =head2 Label
 
 The label denotes the name of the thing we describe. For the example
-above, we are describe an apple, so the label can be C<'apple'>.
+above, we are describing an apple, so the label can be C<'apple'>.
 
 =head2 Weight
 
@@ -237,12 +207,12 @@ C<['red', 'round', 'smooth'] =E<gt> 'apple' =E<gt> 2>.
 After seeing enough samples, a model can be learnt from them by calling
 L</learn>, which generates an L<AI::MaxEntropy::Model> object. A model is
 generally considered as a classifier. When given a set of features,
-one can ask which label is most likely to come with these features by
-calling L<AI::MaxEntropy::Model/predict>.
+one can ask the model which label is most likely to come with these
+features by calling L<AI::MaxEntropy::Model/predict>.
 
 =head1 FUNCTIONS
 
-NOTE: This is still an alpha version, the APIs are possible to be changed
+NOTE: This is still an alpha version, the APIs may be changed
 in future versions.
 
 =head2 new
@@ -265,8 +235,8 @@ The properties values specified in creation time can be changed later, like,
 
 =head2 see
 
-Let the Maximum Entropy learner see a new sample. The weight can be omitted,
-in which case, default weight 1.0 will be used.
+Let the Maximum Entropy learner see a new sample.
+The weight can be omitted, in which case, default weight 1.0 will be used.
 
   my $me = AI::MaxEntropy->new;
 
@@ -275,6 +245,16 @@ in which case, default weight 1.0 will be used.
   
   # see a sample with specified weight 0.5
   $me->see(['c', 'd'] => 'q' => 0.5);
+
+The sample can be also represented in the attribute-value form, which like
+
+  $me->see({color => 'yellow', shape => 'long'} => 'banana');
+  $me->see({color => ['red', 'green'], shape => 'round'} => 'apple');
+
+Actually, the two samples above are converted internally to,
+
+  $me->see(['color:yellow', 'shape:long'] => 'banana');
+  $me->see(['color:red', 'color:green', 'shape:round'] => 'apple');
 
 =head2 forget_all
 

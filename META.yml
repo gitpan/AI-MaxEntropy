@@ -4,7 +4,7 @@ author:
   - Laye Suen, <laye@cpan.org>
 distribution_type: module
 generated_by: Module::Install version 0.68
-license: mit
+license: MIT
 meta-spec: 
   url: http://module-build.sourceforge.net/META-spec-v1.3.html
   version: 1.3
@@ -14,5 +14,6 @@ no_index:
     - inc
     - t
 requires: 
-  Algorithm::LBFGS: 0.12
-version: 0.02
+  Algorithm::LBFGS: 0.14
+  YAML::Syck: 0.87
+version: 0.10

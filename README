@@ -81,7 +81,7 @@ DESCRIPTION
 
   Label
     The label denotes the name of the thing we describe. For the example
-    above, we are describe an apple, so the label can be 'apple'.
+    above, we are describing an apple, so the label can be 'apple'.
 
   Weight
     The weight can be simply taken as how many times a thing with certain
@@ -93,12 +93,12 @@ DESCRIPTION
     After seeing enough samples, a model can be learnt from them by calling
     "learn", which generates an AI::MaxEntropy::Model object. A model is
     generally considered as a classifier. When given a set of features, one
-    can ask which label is most likely to come with these features by
-    calling "predict" in AI::MaxEntropy::Model.
+    can ask the model which label is most likely to come with these features
+    by calling "predict" in AI::MaxEntropy::Model.
 
 FUNCTIONS
-    NOTE: This is still an alpha version, the APIs are possible to be
-    changed in future versions.
+    NOTE: This is still an alpha version, the APIs may be changed in future
+    versions.
 
   new
     Create a Maximum Entropy learner. Optionally, initial values of
@@ -129,6 +129,17 @@ FUNCTIONS
   
       # see a sample with specified weight 0.5
       $me->see(['c', 'd'] => 'q' => 0.5);
+
+    The sample can be also represented in the attribute-value form, which
+    like
+
+      $me->see({color => 'yellow', shape => 'long'} => 'banana');
+      $me->see({color => ['red', 'green'], shape => 'round'} => 'apple');
+
+    Actually, the two samples above are converted internally to,
+
+      $me->see(['color:yellow', 'shape:long'] => 'banana');
+      $me->see(['color:red', 'color:green', 'shape:round'] => 'apple');
 
   forget_all
     Forget all samples the learner have seen previously.
@@ -184,7 +195,7 @@ PROPERTIES
 SEE ALSO
     AI::MaxEntropy::Model, Algorithm::LBFGS
 
-    Statistics::MaxEntropy, Algorithm::CRF, Algorithm::SVM
+    Statistics::MaxEntropy, Algorithm::CRF, Algorithm::SVM, AI::DecisionTree
 
 AUTHOR
     Laye Suen, <laye@cpan.org>

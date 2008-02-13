@@ -5,6 +5,8 @@ package AI::MaxEntropy::Model;
 
 use YAML::Syck;
 
+our $VERSION = '0.10';
+
 sub new {
     my ($class, $model) = @_;
     my $self = bless {}, $class;
@@ -36,6 +38,15 @@ sub all_labels { @{$_[0]->{y_list}} }
 sub score {
     my $self = shift;
     my ($x, $y) = @_;
+    # preprocess if $x is hashref
+    $x = [
+        map {
+	    my $attr = $_;
+	    ref($x->{$attr}) eq 'ARRAY' ? 
+	        map { "$attr:$_" } @{$x->{$attr}} : "$_:$x->{$_}" 
+        } keys %$x
+    ] if ref($x) eq 'HASH';
+    # calculate score
     my @x1 = map { $self->{x_bucket}->{$_} } @$x;
     my $lambda_f = 0;
     if (defined(my $y1 = $self->{y_bucket}->{$y})) {
@@ -49,8 +60,8 @@ sub score {
 
 sub predict {
     my $self = shift;
-    my $x1 = shift;
-    my @score = map { $self->score($x1 => $_) } @{$self->{y_list}};
+    my $x = shift;
+    my @score = map { $self->score($x => $_) } @{$self->{y_list}};
     my ($max_score, $max_y) = (undef, undef);
     for my $y (0 .. $self->{y_num} - 1) {
         ($max_score, $max_y) = ($score[$y], $y) if not defined($max_y);
@@ -99,9 +110,6 @@ AI::MaxEntropy::Model - Perl extension for using Maximum Entropy Models
   $model->load('model_file');
 
 =head1 DESCRIPTION
-
-STOP: Generally, you are not supposed to read this documentation before
-reading L<AI::MaxEntropy>.
 
 This module manipulates models learnt by L<AI::MaxEntropy>. For details
 about Maximum Entropy learner, please refer to L<AI::MaxEntropy>.
