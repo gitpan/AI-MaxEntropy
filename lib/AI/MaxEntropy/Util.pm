@@ -5,34 +5,41 @@ package AI::MaxEntropy::Util;
 
 use Exporter;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 our @ISA = qw/Exporter/;
 
-our @EXPORT_OK = qw/train_and_test precision recall/;
-our %EXPORT_TAGS = (all => [@EXPORT_OK]);
+our @EXPORT_OK =
+    qw/traverse_partially map_partially train_and_test precision recall/;
+
+our %EXPORT_TAGS =
+    (all => [@EXPORT_OK]);
+
+sub traverse_partially(&$$;$) {
+    my ($code, $samples, $pattern, $t) = @_;
+    $t ||= 'x';
+    my ($p, $n) = (length($pattern), scalar(@$samples));
+    for my $i (grep { substr($pattern, $_, 1) eq $t } (0 .. $p - 1)) {
+        for (int($n * $i / $p) .. int($n * ($i + 1) / $p) - 1) {
+	    $_ = $samples->[$_];
+	    $code->();
+	}
+    }
+}
+
+sub map_partially(&$$;$) {
+    my ($code, $samples, $pattern, $t) = @_;
+    my @r;
+    traverse_partially { push @r, $code->($_) } $samples, $pattern, $t;
+    return \@r;
+}
 
 sub train_and_test {
-    my ($me, $samples, $map) = @_;
-    my $p = length($map);
-    my $n = scalar(@$samples);
-    # collect training samples
-    for my $i (0 .. $p - 1) {
-        if (substr($map, $i, 1) eq 'x') {
-	    $me->see(@{$samples->[$_]})
-	        for (int($n * $i / $p) .. int($n * ($i + 1) / $p) - 1);
-	}
-    }
-    # do training
+    my ($me, $samples, $pattern) = @_;
+    traverse_partially { $me->see(@$_) } $samples, $pattern, 'x';
     my $m = $me->learn;
-    # do testing
-    my $r = [];
-    for my $i (0 .. $p - 1) {
-        if (substr($map, $i, 1) eq 'o') {
-	    push @$r, [$samples->[$_] => $m->predict($samples->[$_]->[0])]
-	        for (int($n * $i / $p) .. int($n * ($i + 1) / $p) - 1);
-	}
-    }
+    my $r = map_partially { [$_ => $m->predict($_->[0])] }
+        $samples, $pattern, 'o';
     return ($r, $m);
 }
 
@@ -126,6 +133,41 @@ The function returns two values. The first one is an array ref describe
 the result of testing, in which each element follows a structure like
 C<[sample =E<gt> result]>. The second one is the model learnt from the
 training set, which is an L<AI::MaxEntropy::Model> object.
+
+=head2 traverse_partially
+
+This function is the core implementation of L</train_and_test>. It traverse
+through some of the elements in an array according to a pattern,
+and does some specified actions with each of these elements.
+  
+  my $arr = [1, 2, 3, 4, 5];
+
+  # print out the first two firth of the array
+  traverse_partially { print } $arr, 'xx---';
+
+  # do the same thing, using custom significant character 'o'
+  traverse_partially { print } $arr, 'oo---' => 'o';
+
+  my $samples = [
+      [['a', 'b'] => 'x'],
+      [['c', 'd'] => 'y' => 1.5],
+      ...
+  ];
+  my $me = AI::MaxEntropy->new;
+
+  # see the first one third and the last one third samples
+  traverse_partially { $me->see(@$_) } $samples, 'x-x';
+
+=head2 map_partially
+
+This function is similar to L</traverse_partially>. However, it returns an
+array ref in which all elements in the original array is mapped according
+to the code snippet's return value.
+
+  my $arr = [1, 2, 3, 4, 5];
+  
+  # increase the last one third of the elements by 1
+  $arr = map_partially { $_ + 1 } $arr, '--x';
 
 =head2 precision
 

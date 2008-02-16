@@ -7,7 +7,7 @@ use Algorithm::LBFGS;
 use AI::MaxEntropy::Model;
 use XSLoader;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 XSLoader::load('AI::MaxEntropy', $VERSION);
 
 sub new {
@@ -317,7 +317,9 @@ Please see L<Algorithm::LBFGS/progress_cb> for details.
 
 =head1 SEE ALSO
 
-L<AI::MaxEntropy::Model>, L<Algorithm::LBFGS>
+L<AI::MaxEntropy::Model>, L<AI::MaxEntropy::Util>
+
+L<Algorithm::LBFGS>
 
 L<Statistics::MaxEntropy>, L<Algorithm::CRF>, L<Algorithm::SVM>,
 L<AI::DecisionTree>

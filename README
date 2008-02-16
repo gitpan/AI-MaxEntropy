@@ -193,7 +193,9 @@ PROPERTIES
     Please see "progress_cb" in Algorithm::LBFGS for details.
 
 SEE ALSO
-    AI::MaxEntropy::Model, Algorithm::LBFGS
+    AI::MaxEntropy::Model, AI::MaxEntropy::Util
+
+    Algorithm::LBFGS
 
     Statistics::MaxEntropy, Algorithm::CRF, Algorithm::SVM, AI::DecisionTree
 

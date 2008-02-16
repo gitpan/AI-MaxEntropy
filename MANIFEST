@@ -1,6 +1,5 @@
 AI-MaxEntropy.xs
 Changes
-inc/Algorithm/Diff.pm
 inc/Module/AutoInstall.pm
 inc/Module/Install.pm
 inc/Module/Install/AutoInstall.pm
@@ -11,10 +10,8 @@ inc/Module/Install/MakeMaker.pm
 inc/Module/Install/Metadata.pm
 inc/Test/Builder.pm
 inc/Test/Builder/Module.pm
-inc/Test/Differences.pm
 inc/Test/More.pm
 inc/Test/Number/Delta.pm
-inc/Text/Diff.pm
 lib/AI/MaxEntropy.pm
 lib/AI/MaxEntropy/Model.pm
 lib/AI/MaxEntropy/Util.pm

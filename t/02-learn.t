@@ -1,20 +1,22 @@
 use strict;
 use warnings;
 
-use Test::More tests => 5;
+use Test::More tests => 6;
 use Test::Number::Delta within => 1e-5;
-use Test::Differences;
 
 my $__;
 sub NAME { $__ = shift };
 
 ###
+NAME 'Load the module';
+BEGIN { use_ok 'AI::MaxEntropy' }
+
+###
 NAME 'Preparation for the following tests';
-require AI::MaxEntropy;
 my $me = AI::MaxEntropy->new(smoother => {}); 
 $me->see(['round', 'smooth', 'red'] => 'apple' => 2);
 $me->see(['long', 'smooth', 'yellow'] => 'banana' => 3);
-eq_or_diff
+is_deeply
 [
     $me->{x_list},
     $me->{y_list}
@@ -118,7 +120,7 @@ $__;
 NAME 'Model object construction';
 $me->{smoother} = {};
 my $model = $me->learn;
-eq_or_diff
+is_deeply
 [
     $model->{x_bucket},
     $model->{y_bucket},

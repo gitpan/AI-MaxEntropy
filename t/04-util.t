@@ -1,16 +1,39 @@
 use strict;
 use warnings;
 
-use Test::More tests => 5;
+use Test::More tests => 8;
 use Test::Number::Delta within => 1e-5;
-use Test::Differences;
+
 
 my $__;
 sub NAME { $__ = shift };
 
 ###
 NAME 'Load the module';
-use_ok 'AI::MaxEntropy::Util', qw/:all/;
+BEGIN { use_ok 'AI::MaxEntropy::Util', qw(:all) }
+
+###
+NAME 'traverse_partially x-x-x';
+my $a = [1, 2, 3, 4, 5];
+my $b = [];
+traverse_partially { push @$b, $_ } $a, 'x-x-x';
+is_deeply $b, [1, 3, 5],
+$__;
+
+###
+NAME 'traverse_partially o-o-o => o';
+$a = [1, 2, 3, 4, 5, 6];
+$b = [];
+traverse_partially { push @$b, $_ } $a, 'o-o-o' => 'o';
+is_deeply $b, [1, 3, 5, 6],
+$__;
+
+###
+NAME 'map_partially o-o => o';
+$a = [1, 2, 3, 4, 5, 6];
+$b = map_partially { $_ + 1 } $a, 'o-o' => 'o';
+is_deeply $b, [2, 3, 6, 7],
+$__;
 
 ###
 NAME 'train_and_test xxo';
@@ -23,7 +46,7 @@ $samples = [
     [['e'] => 'z']
 ];
 ($result, $model) = train_and_test($me, $samples, 'xxo');
-eq_or_diff
+is_deeply
 $result,
 [
     [[['e'] => 'z'] => 'z']
@@ -42,7 +65,7 @@ $samples = [
     [['c'] => 'x' => 2]
 ];
 ($result, $model) = train_and_test($me, $samples, 'xxxxo');
-eq_or_diff
+is_deeply
 $result,
 [
     [[['a'] => 'x'] => 'x'],

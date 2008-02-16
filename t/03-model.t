@@ -1,21 +1,23 @@
 use strict;
 use warnings;
 
-use Test::More tests => 2;
+use Test::More tests => 3;
 use Test::Number::Delta within => 1e-5;
-use Test::Differences;
 
 my $__;
 sub NAME { $__ = shift };
 
 ###
+NAME 'Load the module';
+BEGIN { use_ok 'AI::MaxEntropy' }
+
+###
 NAME 'A simple model';
-require AI::MaxEntropy;
 my $me = AI::MaxEntropy->new; 
 $me->see(['round', 'smooth', 'red'] => 'apple' => 2);
 $me->see(['long', 'smooth', 'yellow'] => 'banana' => 3);
 my $model = $me->learn;
-eq_or_diff
+is_deeply
 [
     $model->predict(['round']),
     $model->predict(['red']),
@@ -44,5 +46,5 @@ $model->save('test_model');
 require AI::MaxEntropy::Model;
 my $model1 = AI::MaxEntropy::Model->new('test_model');
 unlink 'test_model';
-eq_or_diff $model, $model1,
+is_deeply $model, $model1,
 $__;

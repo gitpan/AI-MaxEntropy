@@ -14,6 +14,6 @@ no_index:
     - inc
     - t
 requires: 
-  Algorithm::LBFGS: 0.14
+  Algorithm::LBFGS: 0.16
   YAML::Syck: 0.87
-version: 0.10
+version: 0.11

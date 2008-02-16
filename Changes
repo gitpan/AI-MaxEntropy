@@ -1,5 +1,12 @@
 Revision history for Perl extension AI::MaxEntropy.
 
+0.11  Sat Feb 16 17:27:00 2008
+	- Optimize the XS code, now the the function 'learn' should run 
+	  at least twice faster than 0.10 version
+	- New functions in AI::MaxEntropy::Util, which allows the client
+	  program manipulate samples more flexibly
+	- Replace Test::Differences with is_deeply in Test::More
+
 0.10  Wed Feb 13 16:56:00 2008
 	- rewrite the log likelihood evaluation and smoothing by C, now
 	  the ME learner should run more than 10 times faster than the

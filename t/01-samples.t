@@ -3,14 +3,13 @@ use warnings;
 
 use Test::More tests => 6;
 use Test::Number::Delta within => 1e-5;
-use Test::Differences;
 
 my $__;
 sub NAME { $__ = shift };
 
 ###
 NAME 'Load the module';
-use_ok 'AI::MaxEntropy', undef;
+BEGIN { use_ok 'AI::MaxEntropy' }
 
 ###
 NAME 'Create a Maximum Entropy Leaner';
@@ -21,7 +20,7 @@ $__;
 ###
 NAME 'Add a sample';
 $me->see(['round', 'red'] => 'tomato');
-eq_or_diff
+is_deeply
 [
     $me->{samples},
     $me->{x_bucket},
@@ -48,7 +47,7 @@ $__;
 NAME 'Add more samples';
 $me->see(['round', 'smooth', 'red'] => 'apple' => 2);
 $me->see(['long', 'smooth', 'yellow'] => 'banana' => 3);
-eq_or_diff 
+is_deeply 
 [
     $me->{samples},
     $me->{x_bucket},
@@ -78,7 +77,7 @@ $__;
 ###
 NAME 'Forget samples';
 $me->forget_all;
-eq_or_diff 
+is_deeply 
 [
     $me->{samples},
     $me->{x_bucket},
@@ -105,7 +104,7 @@ $__;
 NAME 'Add attribute-value samples';
 $me->see({color => ['red', 'green'], shape => 'round'} => 'apple');
 $me->see({surface => 'smooth', color => 'red'} => 'tomato');
-eq_or_diff
+is_deeply
 [
     $me->{samples},
     $me->{x_bucket},

@@ -7,16 +7,13 @@ name            'AI-MaxEntropy';
 all_from        'lib/AI/MaxEntropy.pm';
 license         'MIT';
 
-requires        'Algorithm::LBFGS'      => '0.14';
+requires        'Algorithm::LBFGS'      => '0.16';
 requires        'YAML::Syck'            => '0.87';
 
 include         'Test::Builder';
 include         'Test::Builder::Module';
 include         'Test::More';
 include         'Test::Number::Delta';
-include         'Test::Differences';
-include         'Text::Diff';
-include         'Algorithm::Diff';
 
 auto_install;
 
