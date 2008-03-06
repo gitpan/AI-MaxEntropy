@@ -1,5 +1,14 @@
 Revision history for Perl extension AI::MaxEntropy.
 
+0.20  Thu Mar  6 20:20:00 2008
+	- Implemented GIS for ME model learning, now the client program can
+	  any of the two algorithm (GIS and L-BFGS) for learning
+	- More optimization for speed
+	- $self->{optimizer} changed to $self->{algorithm}
+	- all_features changed to all_x
+	- Some modification on the documentation to avoid the ambiguity of
+	  the concept 'feature'
+
 0.11  Sat Feb 16 17:27:00 2008
 	- Optimize the XS code, now the the function 'learn' should run 
 	  at least twice faster than 0.10 version

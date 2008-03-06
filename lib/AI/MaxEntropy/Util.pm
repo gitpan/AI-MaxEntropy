@@ -5,7 +5,7 @@ package AI::MaxEntropy::Util;
 
 use Exporter;
 
-our $VERSION = '0.11';
+our $VERSION = '0.20';
 
 our @ISA = qw/Exporter/;
 

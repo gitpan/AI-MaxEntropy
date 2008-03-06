@@ -22,7 +22,8 @@ META.yml
 ppport.h
 README
 t/01-samples.t
-t/02-learn.t
-t/03-model.t
-t/04-util.t
+t/02-learn_by_lbfgs.t
+t/03-learn_by_gis.t
+t/04-model.t
+t/05-util.t
 t/98-pod.t

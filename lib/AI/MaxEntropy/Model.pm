@@ -5,7 +5,7 @@ package AI::MaxEntropy::Model;
 
 use YAML::Syck;
 
-our $VERSION = '0.11';
+our $VERSION = '0.20';
 
 sub new {
     my ($class, $model) = @_;
@@ -17,10 +17,11 @@ sub new {
 sub load {
     my ($self, $file) = @_;
     my $model = LoadFile($file);
-    ($self->{x_list}, $self->{y_list}, $self->{lambda}) = @$model;
+    ($self->{x_list}, $self->{y_list}, $self->{f_map}, $self->{lambda})
+        = @$model;
     $self->{x_num} = scalar(@{$self->{x_list}});
     $self->{y_num} = scalar(@{$self->{y_list}});
-    $self->{f_num} = $self->{x_num} * $self->{y_num};
+    $self->{f_num} = scalar(@{$self->{lambda}});
     $self->{x_bucket}->{$self->{x_list}->[$_]} = $_
         for (0 .. $self->{x_num} - 1);
     $self->{y_bucket}->{$self->{y_list}->[$_]} = $_
@@ -29,10 +30,16 @@ sub load {
 
 sub save {
     my ($self, $file) = @_;
-    DumpFile($file, [$self->{x_list}, $self->{y_list}, $self->{lambda}]);
+    my $data = [
+        $self->{x_list},
+	$self->{y_list},
+	$self->{f_map},
+	$self->{lambda}
+    ];
+    DumpFile($file, $data);    
 }
 
-sub all_features { @{$_[0]->{x_list}} }
+sub all_x { @{$_[0]->{x_list}} }
 sub all_labels { @{$_[0]->{y_list}} }
 
 sub score {
@@ -51,8 +58,11 @@ sub score {
     my $lambda_f = 0;
     if (defined(my $y1 = $self->{y_bucket}->{$y})) {
         for my $x1 (@x1) {
-            $lambda_f += $self->{lambda}->[$x1 + $y1 * $self->{x_num}]
-	        if defined($x1);
+	    if (defined($x1)) {
+	        my $lambda_i = $self->{f_map}->[$y1]->[$x1];
+                $lambda_f += $self->{lambda}->[$lambda_i]
+		    if $lambda_i != -1;
+            }
         }
     }
     return $lambda_f; 
@@ -80,8 +90,6 @@ AI::MaxEntropy::Model - Perl extension for using Maximum Entropy Models
 
 =head1 SYNOPSIS
 
-  # THIS SYNOPSIS IS JUST A SUB SET OF THAT IN AI::MaxEntropy
-  
   use AI::MaxEntropy::Model;
 
   # learn a model by AI::MaxEntropy
@@ -124,8 +132,7 @@ Create a new model object from a model file.
 
 =head2 predict
 
-Given a set of active features (x), figure out which label (y) is most 
-likely to come with.
+Get the most possible label for a unlabeled sample
 
   ...
   
@@ -133,9 +140,7 @@ likely to come with.
 
 =head2 score
 
-Given a set of active features (x) and a label (y), figure out how likely
-C<x =E<gt> y> occurs. The greater the score is, the more likely
-C<x =E<gt> y> holds.
+Get scores for every possible label for a unlabeled sample
 
   ...
 
@@ -157,13 +162,13 @@ Loads the model from a file.
 
   $model->load('model_file');
 
-=head2 all_features
+=head2 all_x
 
-Returns a list of all features.
+Returns a list of all x.
 
 =head2 all_labels
 
-Returns a list of all labels.
+Returns a list of all y (labels).
 
 =head1 SEE ALSO
 

@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 6;
+use Test::More tests => 5;
 use Test::Number::Delta within => 1e-5;
 
 my $__;
@@ -11,21 +11,11 @@ sub NAME { $__ = shift };
 NAME 'Load the module';
 BEGIN { use_ok 'AI::MaxEntropy' }
 
-###
-NAME 'Preparation for the following tests';
 my $me = AI::MaxEntropy->new(smoother => {}); 
 $me->see(['round', 'smooth', 'red'] => 'apple' => 2);
 $me->see(['long', 'smooth', 'yellow'] => 'banana' => 3);
-is_deeply
-[
-    $me->{x_list},
-    $me->{y_list}
-],
-[
-    [ 'round', 'smooth', 'red', 'long', 'yellow' ],
-    [ 'apple', 'banana' ]
-],
-$__;
+$me->cut(0);
+$me->_cache;
 
 ###
 NAME 'Negative log likelihood calculation (lambda = all 0)';
@@ -116,6 +106,8 @@ delta_ok
 ],
 $__;
 
+$me->_free_cache;
+
 ###
 NAME 'Model object construction';
 $me->{smoother} = {};
@@ -128,7 +120,8 @@ is_deeply
     $model->{y_list},
     $model->{x_num},
     $model->{y_num},
-    $model->{f_num}
+    $model->{f_num},
+    $model->{f_map}
 ],
 [
     { round => 0, smooth => 1, red => 2, long => 3, yellow => 4 },
@@ -137,9 +130,11 @@ is_deeply
     [ 'apple', 'banana' ],
     5,
     2,
-    10
+    10,
+    [
+        [0, 1, 2, 3, 4],
+	[5, 6, 7, 8, 9]
+    ]
 ],
 $__;
-
-
 

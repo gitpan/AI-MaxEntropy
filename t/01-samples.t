@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 
-use Test::More tests => 6;
+use Test::More tests => 10;
 use Test::Number::Delta within => 1e-5;
 
 my $__;
@@ -29,7 +29,11 @@ is_deeply
     $me->{y_list},
     $me->{x_num},
     $me->{y_num},
-    $me->{f_num}
+    $me->{f_num},
+    $me->{af_num},
+    $me->{f_freq},
+    $me->{f_map},
+    $me->{last_cut}
 ],
 [
     [ [ [ 0, 1 ] => 0 => 1 ] ],
@@ -39,7 +43,27 @@ is_deeply
     [ 'tomato' ],
     2,
     1,
-    2
+    0,
+    2,
+    [[1, 1]],
+    [],
+    -1
+],
+$__;
+
+###
+NAME 'Cut #1';
+$me->cut(0);
+is_deeply
+[
+    $me->{f_num},
+    $me->{f_map},
+    $me->{last_cut}
+],
+[
+    2,
+    [ [0, 1] ],
+    0
 ],
 $__;
 
@@ -56,7 +80,9 @@ is_deeply
     $me->{y_list},
     $me->{x_num},
     $me->{y_num},
-    $me->{f_num}
+    $me->{af_num},
+    $me->{f_freq},
+    $me->{last_cut}
 ],
 [
     [
@@ -70,9 +96,36 @@ is_deeply
     [ 'tomato', 'apple', 'banana' ],
     5,
     3,
-    15
+    -1,
+    [
+        [1, 1, 0, 0, 0],
+	[2, 2, 2, 0, 0],
+	[0, 0, 3, 3, 3]
+    ],
+    -1
 ],
 $__;
+
+###
+NAME 'Cut #2';
+$me->cut(1);
+is_deeply
+[
+    $me->{f_num},
+    $me->{f_map},
+    $me->{last_cut}
+],
+[
+    8,
+    [
+        [0, 1, -1, -1, -1],
+	[2, 3, 4, -1, -1],
+	[-1, -1, 5, 6, 7]
+    ],
+    1
+],
+$__;
+
 
 ###
 NAME 'Forget samples';
@@ -86,7 +139,11 @@ is_deeply
     $me->{y_list},
     $me->{x_num},
     $me->{y_num},
-    $me->{f_num}
+    $me->{f_num},
+    $me->{af_num},
+    $me->{f_freq},
+    $me->{f_map},
+    $me->{last_cut}
 ],
 [
     [],
@@ -96,7 +153,11 @@ is_deeply
     [],
     0,
     0,
-    0
+    0,
+    0,
+    [],
+    [],
+    -1
 ],
 $__;
 
@@ -113,7 +174,11 @@ is_deeply
     $me->{y_list},
     $me->{x_num},
     $me->{y_num},
-    $me->{f_num}
+    $me->{f_num},
+    $me->{af_num},
+    $me->{f_freq},
+    $me->{f_map},
+    $me->{last_cut}
 ],
 [
     [
@@ -127,7 +192,59 @@ is_deeply
     [ 'apple', 'tomato' ],
     4,
     2,
-    8
+    0,
+    -1,
+    [
+        [1, 1, 1, 0],
+	[1, 0, 0, 1]
+    ],
+    [],
+    -1
 ],
 $__;
 
+###
+NAME 'Yet another test on af_num and f_freq';
+$me->forget_all;
+$me->see(['a', 'b'] => 'x');
+$me->see(['c', 'd'] => 'x');
+$me->see(['a', 'c'] => 'y');
+$me->see(['a', 'd'] => 'x');
+is_deeply
+[
+    $me->{af_num},
+    $me->{f_freq},
+    $me->{f_map},
+    $me->{f_num},
+    $me->{last_cut}
+],
+[
+    2,
+    [
+        [2, 1, 1, 2],
+	[1, 0, 1, 0]
+    ],
+    [],
+    0,
+    -1
+],
+$__;
+
+###
+NAME 'Cut #3';
+$me->cut(2);
+is_deeply
+[
+    $me->{f_num},
+    $me->{f_map},
+    $me->{last_cut}
+],
+[
+    2,
+    [
+        [0, -1, -1, 1],
+	[-1, -1, -1, -1]
+    ],
+    2
+],
+$__;

@@ -16,4 +16,4 @@ no_index:
 requires: 
   Algorithm::LBFGS: 0.16
   YAML::Syck: 0.87
-version: 0.11
+version: 0.20

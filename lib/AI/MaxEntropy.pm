@@ -7,14 +7,14 @@ use Algorithm::LBFGS;
 use AI::MaxEntropy::Model;
 use XSLoader;
 
-our $VERSION = '0.11';
+our $VERSION = '0.20';
 XSLoader::load('AI::MaxEntropy', $VERSION);
 
 sub new {
     my $class = shift;
     my $self = {
        smoother => {},
-       optimizer => { },
+       algorithm => {},
        @_,
        samples => [],
        x_bucket => {},
@@ -23,7 +23,12 @@ sub new {
        y_list => [],
        x_num => 0,
        y_num => 0,
-       f_num => 0
+       f_num => 0,
+       af_num => 0,
+       f_freq => [],
+       f_map => [],
+       last_cut => -1,
+       _c => {}
     };
     return bless $self, $class;
 }
@@ -40,36 +45,61 @@ sub see {
 	        map { "$attr:$_" } @{$x->{$attr}} : "$_:$x->{$_}" 
         } keys %$x
     ] if ref($x) eq 'HASH';
+    # update af_num
+    $self->{af_num} = scalar(@$x) if $self->{af_num} == 0;
+    $self->{af_num} = -1 if $self->{af_num} != scalar(@$x);
+    # convert y from string to ID
+    my $y_id = $self->{y_bucket}->{$y};
+    # new y
+    if (!defined($y_id)) {
+        # update y_list, y_num, y_bucket, f_freq
+        push @{$self->{y_list}}, $y;
+	$self->{y_num} = scalar(@{$self->{y_list}});
+	$y_id = $self->{y_num} - 1;
+	$self->{y_bucket}->{$y} = $y_id;
+	push @{$self->{f_freq}}, [map { 0 } (1 .. $self->{x_num})];
+	# save ID
+	$y1 = $y_id;
+    }
+    # old y
+    else { $y1 = $y_id }
     # convert x from strings to IDs
     for (@$x) {
         my $x_id = $self->{x_bucket}->{$_};
 	# new x
 	if (!defined($x_id)) {
+	    # update x_list, x_num, x_bucket, f_freq
 	    push @{$self->{x_list}}, $_;
 	    $self->{x_num} = scalar(@{$self->{x_list}});
 	    $x_id = $self->{x_num} - 1;
 	    $self->{x_bucket}->{$_} = $x_id;
+	    push @{$self->{f_freq}->[$_]}, 0 for (0 .. $self->{y_num} - 1);
+	    # save ID
 	    push @$x1, $x_id;
 	}
         # old x
 	else { push @$x1, $x_id }
+	# update f_freq
+	$self->{f_freq}->[$y_id]->[$x_id] += $w;
     }
-    # convert y from string to ID
-    my $y_id = $self->{y_bucket}->{$y};
-    # new y
-    if (!defined($y_id)) {
-        push @{$self->{y_list}}, $y;
-	$self->{y_num} = scalar(@{$self->{y_list}});
-	$y_id = $self->{y_num} - 1;
-	$self->{y_bucket}->{$y} = $y_id;
-	$y1 = $y_id;
-    }
-    # old y
-    else { $y1 = $y_id }
     # add the sample
     push @{$self->{samples}}, [$x1, $y1, $w];
-    # update f_num
-    $self->{f_num} = $self->{x_num} * $self->{y_num};
+    $self->{last_cut} = -1;
+}
+
+sub cut {
+    my ($self, $t) = @_;
+    $self->{f_num} = 0;
+    for my $y (0 .. $self->{y_num} - 1) {
+        for my $x (0 .. $self->{x_num} - 1) {
+	    if ($self->{f_freq}->[$y]->[$x] >= $t) {
+	        $self->{f_map}->[$y]->[$x] = $self->{f_num};
+		$self->{f_num}++;
+	    }
+	    else { $self->{f_map}->[$y]->[$x] = -1 }
+	}
+    }
+    $self->{last_cut} = $t;
 }
 
 sub forget_all {
@@ -82,20 +112,64 @@ sub forget_all {
     $self->{f_num} = 0;
     $self->{x_list} = [];
     $self->{y_list} = [];
+    $self->{af_num} = 0;
+    $self->{f_freq} = [];
+    $self->{f_map} = [];
+    $self->{last_cut} = -1;
+    $self->{_c} = {};
+}
+
+sub _cache {
+    my $self = shift;
+    $self->_cache_samples;
+    $self->_cache_f_map;
+}
+
+sub _free_cache {
+    my $self = shift;
+    $self->_free_cache_samples;
+    $self->_free_cache_f_map;
 }
 
 sub learn {
     my $self = shift;
-    $self->{lambda} = [];
-    @{$self->{lambda}} = map { 0 } (1 .. $self->{f_num});
-    my $o = Algorithm::LBFGS->new(%{$self->{optimizer}});
-    $o->fmin(\&_neg_log_likelihood, $self->{lambda},
-        $self->{progress_cb}, $self);
-    my $model = AI::MaxEntropy::Model->new;
+    # cut 0 for default
+    $self->cut(0) if $self->{last_cut} == -1;
+    # initialize
+    $self->{lambda} = [map { 0 } (1 .. $self->{f_num})];
+    $self->_cache;
+    # optimize
+    my $type = $self->{algorithm}->{type} || 'lbfgs';
+    if ($type eq 'lbfgs') {
+        my $o = Algorithm::LBFGS->new(%{$self->{algorithm}});
+        $o->fmin(\&_neg_log_likelihood, $self->{lambda},
+            $self->{algorithm}->{progress_cb}, $self);
+    }
+    elsif ($type eq 'gis') {
+        die 'GIS is not applicable'
+	    if $self->{af_num} == -1 or $self->{last_cut} != 0;
+	my $progress_cb = $self->{algorithm}->{progress_cb};
+	$progress_cb = sub {
+	    print "$_[0]: |lambda| = $_[3], |d_lambda| = $_[4]\n"; 0;
+        } if defined($progress_cb) and $progress_cb eq 'verbose';
+        my $epsilon = $self->{algorithm}->{epsilon} || 1e-3;
+        $self->{lambda} = $self->_apply_gis($progress_cb, $epsilon);
+    }
+    else { die "$type is not a valid algorithm type" }
+    # finish
+    $self->_free_cache;
+    return $self->_create_model;
+}
+
+sub _create_model {
+    my $self = shift;
+    my $model = AI::MaxEntropy::Model->new;    
     $model->{$_} = ref($self->{$_}) eq 'ARRAY' ? [@{$self->{$_}}] :
                    ref($self->{$_}) eq 'HASH' ? {%{$self->{$_}}} :
 		   $self->{$_}
-        for qw/x_list y_list lambda x_num y_num f_num x_bucket y_bucket/;
+    for qw/x_list y_list lambda x_num y_num f_num x_bucket y_bucket/;
+    $model->{f_map}->[$_] = [@{$self->{f_map}->[$_]}]
+       for (0 .. $self->{y_num} - 1); 
     return $model;
 }
 
@@ -130,10 +204,10 @@ AI::MaxEntropy - Perl extension for learning Maximum Entropy Models
 
   # ...
 
-  # okay, let it learn
+  # and, let it learn
   my $model = $me->learn;
 
-  # then, we can make prediction on unseen data
+  # then, we can make predictions on unseen data
 
   # ask what a red thing is most likely to be
   print $model->predict(['red'])."\n";
@@ -162,53 +236,78 @@ AI::MaxEntropy - Perl extension for learning Maximum Entropy Models
   # load the model
   $model->load('model_file');
 
-=head1 DESCRIPTION
+=head1 CONCEPTS
 
-Maximum Entropy (ME) model is a popular machine learning approach, which
-is used widely as a general classifier.
-A ME learner try to recover the real probability distribution based on 
-limited number of observations, by applying the principle of maximum 
-entropy. The principle of maximum entropy assumes nothing on unknown data,
-in another word, all unknown things are as even as possible, which makes
-the entropy of the distribution maxmized.
+=head2 What is a Maximum Entropy model?
+
+Maximum Entropy (ME) model is a popular approach for machine learning.
+From a user's view, it just behaves like a classifier which classify things
+according to the previously learnt things.
+
+Theorically, a ME learner try to recover the real probability distribution 
+of the data based on limited number of observations, by applying the
+principle of maximum entropy. 
+
+You can find some good tutorials on Maximum Entropy model here:
+
+L<http://homepages.inf.ed.ac.uk/s0450736/maxent.html>
+
+=head2 Features
+
+Generally, a feature is a binary function answers a yes-no question on a
+specified piece of data. 
+
+For examples, 
+
+  "Is it a red apple?"
+
+  "Is it a yellow banana?"
+
+If the answer is yes,
+we say this feature is active on that piece of data.
+
+In practise, a feature is usually represented as
+a tuple C<E<lt>x, yE<gt>>. For examples, the above two features can be
+represented as
+
+  <red, apple>
+
+  <yellow, banana>
 
 =head2 Samples
 
-In this module, each observation is abstracted as a sample.
-A sample is denoted as C<x =E<gt> y =E<gt> w>,
-which consists of a set of active features (array ref x),
-a label (scalar y) and a weight (scalar w).
-The client program adds a new sample to the learner by L</see>.
+A sample is a set of active features, all of which share a common C<y>.
+This common C<y> is sometimes called label or tag.
+For example, we have a big round red apple, the correpsonding sample is 
 
-=head2 Features and Active Features
+  {<big, apple>, <round, apple>, <red, apple>}
 
-The features describe which characteristics things can have. And, if 
-a thing has a certain feature, we say that feature is active in that
-thing (an active feature). For example, an apple is red, round and smooth, 
-then the active features of an apple can be denoted as an array ref
-C<['red', 'round', 'smooth']>. Each element here is an active feature
-(generally, denoted by a string), and the order of active features is
-not concerned.
+In this module, a samples is denoted in Perl code as
 
-=head2 Label
+  $xs => $y => $w
 
-The label denotes the name of the thing we describe. For the example
-above, we are describing an apple, so the label can be C<'apple'>.
+C<$xs> is an array ref holding all C<x>,
+C<$y> is a scalar holding the label
+and C<$w> is the weight of the sample, which tells how many times the
+sample occurs.
 
-=head2 Weight
+Therefore, the above sample can be denoted as
 
-The weight can be simply taken as how many times a thing with certain
-characteristics occurs, or how persuasive it is. For example, we see 2 
-red round smooth apples, we denote it as
-C<['red', 'round', 'smooth'] =E<gt> 'apple' =E<gt> 2>.
+  ['big', 'round', 'red'] => 'apple' => 1.0
 
-=head2 Model
+The weight C<$w> can be ommited when it equals to 1.0,
+so the above denotation can be shorten to
 
-After seeing enough samples, a model can be learnt from them by calling
-L</learn>, which generates an L<AI::MaxEntropy::Model> object. A model is
-generally considered as a classifier. When given a set of features,
-one can ask the model which label is most likely to come with these
-features by calling L<AI::MaxEntropy::Model/predict>.
+  ['big', 'round', 'red'] => 'apple'
+
+=head2 Models
+
+With a set of samples, a model can be learnt for future predictions.
+The model (the lambda vector essentailly) is a knowledge representation
+of the samples that it have seen before.
+By applying the model, we can calculate the probability of each possible
+label for a certain sample. And choose the most possible one
+according to these probabilities.
 
 =head1 FUNCTIONS
 
@@ -218,33 +317,27 @@ in future versions.
 =head2 new
 
 Create a Maximum Entropy learner. Optionally, initial values of properties
-can be specified here.
+can be specified.
 
   my $me1 = AI::MaxEntropy->new;
   my $me2 = AI::MaxEntropy->new(
-      optimizer => { epsilon => 1e-6 });
+      algorithm => { epsilon => 1e-6 });
   my $me3 = AI::MaxEntropy->new(
-      optimizer => { m => 7, epsilon => 1e-4 },
+      algorithm => { m => 7, epsilon => 1e-4 },
       smoother => { type => 'gaussian', sigma => 0.8 }
   );
 
-The properties values specified in creation time can be changed later, like,
-
-  $me->{optimizer} = { epsilon => 1e-3 };
-  $me->{smoother} = {};
-
 =head2 see
 
-Let the Maximum Entropy learner see a new sample.
-The weight can be omitted, in which case, default weight 1.0 will be used.
+Let the Maximum Entropy learner see a sample.
 
   my $me = AI::MaxEntropy->new;
 
   # see a sample with default weight 1.0
-  $me->see(['a', 'b'] => 'p');
+  $me->see(['red', 'round'] => 'apple');
   
   # see a sample with specified weight 0.5
-  $me->see(['c', 'd'] => 'q' => 0.5);
+  $me->see(['yellow', 'long'] => 'banana' => 0.5);
 
 The sample can be also represented in the attribute-value form, which like
 
@@ -260,11 +353,22 @@ Actually, the two samples above are converted internally to,
 
 Forget all samples the learner have seen previously.
 
+=head2 cut
+
+Cut the features that occur less than the specified number.
+
+For example, 
+
+  ...
+  $me->cut(1)
+
+will cut all features that occur less than one time.
+
 =head2 learn 
 
-Learn a model from all the samples,
+Learn a model from all the samples that the learner have seen so far,
 returns an L<AI::MaxEntropy::Model> object, which can be used to make
-prediction on unseen data.
+prediction on unlabeled samples.
 
   ...
 
@@ -274,21 +378,95 @@ prediction on unseen data.
 
 =head1 PROPERTIES
 
-=head2 optimizer
+=head2 algorithm
 
-The optimizer is the essential component of this module. This property
-enable the client program to customize the behavior of the optimizer. It
-is a hash ref, containing all parameters that the client program want to
-pass to the L-BFGS optimizer. Please refer to
-L<Algorithm::LBFGS/List of Parameters> for details.
+This property enables client program to choose different algorithms for
+learning the ME model and set their parameters.
+
+There are mainly 3 algorithm for learning ME models, they are GIS, IIS and
+L-BFGS. This module implements 2 of them, namely,  L-BFGS and GIS.
+L-BFGS provides full functionality, while GIS runs faster, but only 
+applicable on limited scenarios.
+
+To use GIS, the following conditions must be satisified:
+
+1. All samples have same number of active features
+
+2. No feature has been cut
+
+3. No smoother is used (in fact, the property L</smoother> is simplly
+ignored when the type of algorithm equal to 'gis').
+
+This property C<algorithm> is supposed to be a hash ref, like
+
+  {
+    type => ...,
+    progress_cb => ...,
+    param_1 => ...,
+    param_2 => ...,
+    ...,
+    param_n => ...
+  }
+
+=head3 type
+
+The entry C<type =E<gt> ...> specifies which algorithm is used for the 
+optimization. Valid values include:
+
+  'lbfgs'       Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS)
+  'gis'         General Iterative Scaling (GIS)
+
+If ommited, C<'lbfgs'> is used by default.
+
+=head3 progress_cb
+
+The entry C<progress_cb =E<gt> ...> specifies the progress callback
+subroutine which is used to trace the process of the algorithm. 
+The specified callback routine will be called at each iteration of the
+algorithm.
+
+For L-BFGS, C<progress_cb> will be directly passed to
+L<Algorithm::LBFGS/fmin>. C<f(x)> is the negative log-likelihood of current
+lambda vector.
+
+For GIS, the C<progress_cb> is supposed to have a prototype like
+
+  progress_cb(i, lambda, d_lambda, lambda_norm, d_lambda_norm)
+
+C<i> is the number of the iterations, C<lambda> is an array ref containing
+the current lambda vector, C<d_lambda> is an array ref containing the
+delta of the lambda vector in current iteration, C<lambda_norm> and
+C<d_lambda_norm> are Euclid norms of C<lambda> and C<d_lambda> respectively.
+
+For both L-BFGS and GIS, the client program can also pass a string
+C<'verbose'> to C<progress_cb> to use a default progress callback
+which simply print out the progress on the screen.
+
+C<progress_cb> can also be omitted if the client program
+do not want to trace the progress.
+
+=head3 parameters
+
+The rest entries are parameters for the specified algorithm.
+Each parameter will be assigned with its default value when it is not
+given explicitly.
+
+For L-BFGS, the parameters will be directly passed to
+L<Algorithm::LBFGS> object, please refer to L<Algorithm::LBFGS/Parameters>
+for details.
+
+For GIS, there is only one parameter C<epsilon>, which controls the
+precision of the algorithm (similar to the C<epsilon> in
+L<Algorithm::LBFGS>). Generally speaking, a smaller C<epsilon> produces
+a more precise result. The default value of C<epsilon> is 1e-3.
 
 =head2 smoother
 
 The smoother is a solution to the over-fitting problem. 
-This property chooses the which type of smoother the client program want to
+This property chooses which type of smoother the client program want to
 apply and sets the smoothing parameters. 
 
-Only one smoother have been implemented in this version, 
+Only one smoother have been implemented in this version of the module, 
 the Gaussian smoother.
 
 One can apply the Gaussian smoother as following,
@@ -297,23 +475,9 @@ One can apply the Gaussian smoother as following,
       smoother => { type => 'gaussian', sigma => 0.6 }
   );
 
-The Gaussian smoother has one parameter sigma, which indicates the strength
-of smoothing. Usually, sigma is a positive number no greater than 1.0. The
-strength of smoothing grows as sigma getting close to 0.
-
-=head2 progress_cb
-
-Usually, learning a model is a time consuming job. And the most time 
-consuming part of this process is the optimization. This callback
-subroutine is for people who want to trace the progress of the optimization.
-By tracing it, they can do some useful output, which makes the learning
-process more user-friendly. 
-
-This callback subroutine will be passed directly to 
-L<Algorithm::LBFGS/fmin>.
-You can also pass a string 'verbose' to this property, 
-which simply print out the progress by a build-in callback subroutine.
-Please see L<Algorithm::LBFGS/progress_cb> for details.
+The parameter C<sigma> indicates the strength of smoothing.
+Usually, sigma is a positive number no greater than 1.0.
+The strength of smoothing grows as sigma getting close to 0.
 
 =head1 SEE ALSO
 
